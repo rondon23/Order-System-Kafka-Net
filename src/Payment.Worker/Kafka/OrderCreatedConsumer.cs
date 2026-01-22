@@ -46,7 +46,7 @@ public sealed class OrderCreatedConsumer : IDisposable
             var orderEvent = JsonSerializer.Deserialize<OrderCreatedEvent>(
                 result.Message.Value)!;
 
-            // 🧠 IDEMPOTÊNCIA
+            //IDEMPOTÊNCIA
             if (_eventStore.HasBeenProcessed(orderEvent.EventId))
             {
                 _logger.LogWarning(
