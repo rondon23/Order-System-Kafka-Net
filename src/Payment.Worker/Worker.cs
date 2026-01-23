@@ -1,4 +1,4 @@
-using Payment.Worker.Kafka;
+using Payment.Worker.Consumers;
 
 namespace Payment.Worker;
 
@@ -15,10 +15,10 @@ public sealed class Worker : BackgroundService
         _logger = logger;
     }
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("Payment.Worker started");
-        _consumer.Consume(stoppingToken);
-        return Task.CompletedTask;
+
+        await _consumer.ConsumeAsync(stoppingToken);
     }
 }

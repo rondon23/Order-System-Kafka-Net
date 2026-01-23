@@ -1,6 +1,7 @@
 namespace EventBus.Idempotency;
 
-public class IIdempotencyStore
+public interface IIdempotencyStore
 {
-    
+    Task<bool> HasProcessedAsync(Guid eventId);
+    Task MarkAsProcessedAsync(Guid eventId);
 }

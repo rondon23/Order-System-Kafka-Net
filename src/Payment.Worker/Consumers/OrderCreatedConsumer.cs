@@ -1,10 +1,12 @@
+using System.Text;
 using System.Text.Json;
 using Confluent.Kafka;
 using EventBus.Events;
 using Microsoft.Extensions.Logging;
+using Payment.Worker.Kafka;
 using Payment.Worker.Persistence;
 
-namespace Payment.Worker.Kafka;
+namespace Payment.Worker.Consumers;
 
 public sealed class OrderCreatedConsumer : IDisposable
 {
@@ -38,15 +40,16 @@ public sealed class OrderCreatedConsumer : IDisposable
         _consumer.Subscribe(configuration["Kafka:OrderCreatedTopic"]!);
     }
 
-    public void Consume(CancellationToken stoppingToken)
+    public async Task ConsumeAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
         {
             var result = _consumer.Consume(stoppingToken);
+
             var orderEvent = JsonSerializer.Deserialize<OrderCreatedEvent>(
                 result.Message.Value)!;
 
-            //IDEMPOTÊNCIA
+            // 🧠 IDEMPOTÊNCIA
             if (_eventStore.HasBeenProcessed(orderEvent.EventId))
             {
                 _logger.LogWarning(
@@ -66,11 +69,12 @@ public sealed class OrderCreatedConsumer : IDisposable
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex,
+                _logger.LogError(
+                    ex,
                     "Error processing OrderId {OrderId}",
                     orderEvent.OrderId);
 
-                HandleRetry(orderEvent, result);
+                await HandleRetryAsync(orderEvent, result);
             }
         }
     }
@@ -86,18 +90,20 @@ public sealed class OrderCreatedConsumer : IDisposable
             orderEvent.OrderId);
     }
 
-    private async void HandleRetry(
+    private async Task HandleRetryAsync(
         OrderCreatedEvent orderEvent,
         ConsumeResult<string, string> result)
     {
         var retryCount = result.Message.Headers
             .TryGetLastBytes("retry-count", out var value)
-            ? int.Parse(System.Text.Encoding.UTF8.GetString(value))
+            ? int.Parse(Encoding.UTF8.GetString(value))
             : 0;
 
         if (retryCount < _maxRetry)
         {
-            await _retryProducer.SendToRetryAsync(orderEvent);
+            await _retryProducer.SendToRetryAsync(
+                orderEvent,
+                retryCount + 1);
 
             _logger.LogWarning(
                 "Event {EventId} sent to retry ({Retry})",
@@ -113,6 +119,7 @@ public sealed class OrderCreatedConsumer : IDisposable
                 orderEvent.EventId);
         }
 
+        // Commit SEMPRE após retry ou DLQ
         _consumer.Commit(result);
     }
 
@@ -122,4 +129,3 @@ public sealed class OrderCreatedConsumer : IDisposable
         _consumer.Dispose();
     }
 }
-    
